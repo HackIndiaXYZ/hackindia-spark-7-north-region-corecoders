@@ -3,13 +3,18 @@ import ChatBox from "./ChatBox";
 import InputBar from "./InputBar";
 import { io } from "socket.io-client";
 
+
 const socket = io("http://localhost:3001");
 
 function Chat() {
   const [messages, setMessages] = useState([
     { text: "Welcome 👋", sender: "bot" },
   ]);
-
+  
+useEffect(() => {
+  socket.emit("join_room", "room1");
+}, []);
+  
   // ✅ Receive messages (ONLY here)
   useEffect(() => {
     socket.on("receive_message", (data) => {

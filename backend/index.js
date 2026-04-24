@@ -34,3 +34,9 @@ io.on("connection", (socket) => {
 server.listen(3001, () => {
   console.log("Server running on port 3001");
 });
+io.on("connection", (socket) => {
+  socket.on("join_room", (roomId) => {
+    socket.join(roomId);
+    console.log("User joined:", roomId);
+  });
+});
