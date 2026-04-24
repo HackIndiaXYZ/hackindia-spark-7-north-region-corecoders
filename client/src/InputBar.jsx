@@ -20,7 +20,7 @@ function InputBar({ sendMessage }) {
 
       <button
         onClick={handleSend}
-        className="px-5 py-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 hover:scale-110 transition"
+        className="px-5 py-2 rounded-full bg-linear-to-r from-blue-500 to-purple-600 hover:scale-110 transition"
       >
         Send
       </button>
