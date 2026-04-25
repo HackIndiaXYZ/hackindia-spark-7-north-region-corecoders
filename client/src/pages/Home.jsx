@@ -1,31 +1,30 @@
+// import Button from "../components/Button";
+// import GlassCard from "../components/GlassCard";
 // import { useNavigate } from "react-router-dom";
 
-// function Home() {
+// export default function Home() {
 //   const navigate = useNavigate();
 
 //   return (
-//     <div className="flex items-center justify-center h-screen">
-//       <div className="bg-white/10 backdrop-blur-lg p-10 rounded-2xl shadow-2xl text-center hover:scale-105 transition">
-//         <h1 className="text-4xl font-bold mb-4 bg-linear-to-r from-blue-400 to-purple-500 text-transparent bg-clip-text">
-//           AI Meeting Brain
-//         </h1>
+//     <div className="min-h-screen flex items-center justify-center px-4 bg-[radial-gradient(circle_at_top,rgba(99,102,241,0.2),#020617)]">
+//       <GlassCard className="w-full max-w-md text-center space-y-6">
 
-//         <p className="text-gray-300 mb-6">
-//           Smart conversations. Instant insights.
-//         </p>
+//         <h1 className="text-2xl font-bold">Welcome 👋</h1>
 
-//         <button
-//           onClick={() => navigate("/chat")}
-//           className="px-6 py-3 rounded-full bg-linear-to-r from-blue-500 to-purple-600 hover:scale-110 transition-all duration-300"
-//         >
-//           Enter Chat
-//         </button>
-//       </div>
+//         <Button onClick={() => navigate("/public")}>
+//           Public Rooms
+//         </Button>
+
+//         <Button onClick={() => navigate("/private")}>
+//           Private Room
+//         </Button>
+
+//       </GlassCard>
+      
 //     </div>
 //   );
 // }
 
-// export default Home;
 import { useNavigate } from "react-router-dom";
 
 export default function Home() {
@@ -104,14 +103,14 @@ export default function Home() {
             <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
               <button
                 className="btn-neon"
-                onClick={() => navigate("/public")}
+                onClick={() => navigate("/private")}
                 style={{ width: "100%", textAlign: "center" }}
               >
-                🌐 &nbsp; Explore Public Rooms
+                 Create/Join a Private Room
               </button>
 
               <button
-                onClick={() => navigate("/private")}
+                onClick={() => navigate("/public")}
                 style={{
                   width: "100%",
                   background: "rgba(255,255,255,0.04)",
@@ -135,7 +134,7 @@ export default function Home() {
                   e.currentTarget.style.borderColor = "rgba(99,102,241,0.3)";
                 }}
               >
-                🔒 &nbsp; Private Room
+               🌐 &nbsp; Explore Public Rooms
               </button>
             </div>
 
