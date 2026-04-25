@@ -5,15 +5,16 @@ import { io } from "socket.io-client";
 
 
 const socket = io("http://localhost:3001");
-
 function Chat() {
+  const [room] = useState(() => prompt("Enter room ID:"));
   const [messages, setMessages] = useState([
     { text: "Welcome 👋", sender: "bot" },
   ]);
   
-useEffect(() => {
-  socket.emit("join_room", "room1");
-}, []);
+  useEffect(() => {
+    if (!room) return;
+    socket.emit("join_room", room);
+  }, [room]);
   
   // ✅ Receive messages (ONLY here)
   useEffect(() => {
@@ -29,7 +30,7 @@ useEffect(() => {
     if (!msg.trim()) return;
 
     const messageData = {
-      roomId: "room1",
+      roomId: room,
       text: msg,
       sender: "user",
     };
@@ -37,8 +38,6 @@ useEffect(() => {
     // send to backend
     socket.emit("send_message", messageData);
 
-    // update UI instantly
-    setMessages((prev) => [...prev, messageData]);
   };
 
   return (

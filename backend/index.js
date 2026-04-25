@@ -17,15 +17,18 @@ const io = new Server(server, {
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
+  // JOIN ROOM
   socket.on("join_room", (roomId) => {
     socket.join(roomId);
-    console.log(`User joined room: ${roomId}`);
+    console.log("User joined room:", roomId);
   });
 
+  // SEND MESSAGE
   socket.on("send_message", (data) => {
     io.to(data.roomId).emit("receive_message", data);
   });
 
+  // DISCONNECT
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);
   });
@@ -33,10 +36,4 @@ io.on("connection", (socket) => {
 
 server.listen(3001, () => {
   console.log("Server running on port 3001");
-});
-io.on("connection", (socket) => {
-  socket.on("join_room", (roomId) => {
-    socket.join(roomId);
-    console.log("User joined:", roomId);
-  });
 });
