@@ -133,3 +133,7 @@ body {
   0%, 100% { opacity: 1; box-shadow: 0 0 6px #a855f7; }
   50%       { opacity: 0.5; box-shadow: 0 0 14px #a855f7; }
 }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
