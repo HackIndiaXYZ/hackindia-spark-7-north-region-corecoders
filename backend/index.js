@@ -1,7 +1,11 @@
+require("dotenv").config();
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
+const Groq = require("groq-sdk");
+
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 const app = express();
 const allowedOrigins = [
@@ -16,25 +20,8 @@ const io = new Server(server, {
   cors: { origin: allowedOrigins, methods: ["GET", "POST"] },
 });
 
-/**
- * rooms[roomId] = {
- *   name: string,       — display name
- *   code: string,       — secret code (password to enter)
- *   creatorId: string,  — socket.id of creator
- *   kickedIPs: Set,
- *   members: Map(socketId -> { username, ip })
- * }
- * roomMessages[roomId] = [ ...msgs ]
- *
- * roomId  = auto-generated slug from room name (e.g. "my-room")
- * code    = what the user sets (e.g. "secret123") — shared to invite others
- *
- * Joiners only know the CODE. The server looks up the room by code.
- */
 const rooms = {};
 const roomMessages = {};
-
-// Index: code -> roomId  (so we can look up a room by its code)
 const codeToRoomId = {};
 
 function getIP(socket) {
@@ -47,7 +34,6 @@ function getIP(socket) {
 function broadcastCount(roomId, toSocket = null) {
   const count = rooms[roomId]?.members?.size || 0;
   io.to(roomId).emit("room_count", count);
-  // Also send directly to the joining socket in case it isn't in the room yet
   if (toSocket) toSocket.emit("room_count", count);
 }
 
@@ -56,7 +42,6 @@ io.on("connection", (socket) => {
 
   // ── CREATE ROOM ──
   socket.on("create_room", ({ roomName, roomCode, username }, cb) => {
-    // roomId is a slug from the display name
     const roomId = roomName.trim().toLowerCase().replace(/\s+/g, "-") + "-" + Date.now();
     const code   = roomCode.trim().toLowerCase().replace(/\s+/g, "-");
 
@@ -94,23 +79,18 @@ io.on("connection", (socket) => {
 
     socket.join(roomId);
     room.members.set(socket.id, { username, ip });
-
-    // Send history to the new joiner only
     socket.emit("message_history", roomMessages[roomId] || []);
     broadcastCount(roomId, socket);
-
-    // Notify others
     socket.to(roomId).emit("user_joined", { username });
 
     cb({ success: true, roomId, roomName: room.name });
     console.log(`${username} joined room "${room.name}" via code "${code}"`);
   });
 
-  // ── REJOIN (on browser refresh, roomId known but code not needed) ──
+  // ── REJOIN (browser refresh) ──
   socket.on("rejoin_room", ({ roomId, username }) => {
     const room = rooms[roomId];
-    if (!room) return; // room gone (server restart), user stays on error
-    const ip = getIP(socket);
+    if (!room) return;
     if (room.kickedIPs.has(ip)) return;
     socket.join(roomId);
     room.members.set(socket.id, { username, ip });
@@ -123,13 +103,66 @@ io.on("connection", (socket) => {
   socket.on("send_message", ({ roomId, text, sender }) => {
     if (!rooms[roomId]) return;
     const room = rooms[roomId];
-    const msg  = {
+    const msg = {
       roomId, text, sender,
       isAdmin: room.creatorId === socket.id,
       timestamp: Date.now(),
     };
     roomMessages[roomId].push(msg);
     io.to(roomId).emit("receive_message", msg);
+  });
+
+  // ── AI MESSAGE (@ai trigger) ──
+  socket.on("ai_message", async ({ roomId, message, sender }) => {
+    if (!rooms[roomId]) return;
+    const room = rooms[roomId];
+
+    // Broadcast the user's own @ai message to everyone first
+    const userMsg = {
+      roomId, text: message, sender,
+      isAdmin: room.creatorId === socket.id,
+      timestamp: Date.now(),
+    };
+    roomMessages[roomId].push(userMsg);
+    io.to(roomId).emit("receive_message", userMsg);
+
+    const prompt = message.replace(/^@ai\s*/i, "").trim();
+    if (!prompt) return;
+
+    try {
+      const response = await groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 1024,
+      });
+
+      const aiReply = response.choices[0].message.content;
+      const timestamp = Date.now();
+
+      // Save one copy in history
+      roomMessages[roomId].push({ roomId, text: aiReply, sender: "AI", isAI: true, timestamp });
+
+      // Requester sees AI reply on the RIGHT
+      socket.emit("receive_message", {
+        roomId, text: aiReply, sender: "AI", isAI: true, isAIMe: true, timestamp,
+      });
+
+      // Everyone else sees AI reply on the LEFT
+      socket.to(roomId).emit("receive_message", {
+        roomId, text: aiReply, sender: "AI", isAI: true, isAIMe: false, timestamp,
+      });
+
+    } catch (err) {
+      console.error("Groq API error:", err.message);
+      socket.emit("receive_message", {
+        roomId,
+        text: "AI is unavailable right now. Please try again later.",
+        sender: "AI",
+        isAI: true,
+        isAIMe: true,
+        timestamp: Date.now(),
+      });
+    }
   });
 
   // ── KICK USER ──
@@ -141,11 +174,9 @@ io.on("connection", (socket) => {
 
     room.kickedIPs.add(target.ip);
     room.members.delete(targetSocketId);
-
     io.to(targetSocketId).emit("kicked");
     const targetSocket = io.sockets.sockets.get(targetSocketId);
     if (targetSocket) targetSocket.leave(roomId);
-
     io.to(roomId).emit("user_kicked", { username: target.username });
     broadcastCount(roomId);
   });
@@ -159,14 +190,13 @@ io.on("connection", (socket) => {
       socket.emit("code_change_error", { error: "Code already in use." });
       return;
     }
-    // Remove old code mapping
     delete codeToRoomId[room.code];
     room.code = normalized;
     codeToRoomId[normalized] = roomId;
     socket.emit("code_changed", { success: true });
   });
 
-  // ── GET MEMBERS (admin) ──
+  // ── GET MEMBERS ──
   socket.on("get_members", ({ roomId }, cb) => {
     const room = rooms[roomId];
     if (!room) return cb([]);
@@ -184,7 +214,6 @@ io.on("connection", (socket) => {
       if (room.members.has(socket.id)) {
         const { username } = room.members.get(socket.id);
         room.members.delete(socket.id);
-        // Broadcast updated count to remaining members only
         broadcastCount(roomId);
         io.to(roomId).emit("user_left", { username });
       }
@@ -193,4 +222,4 @@ io.on("connection", (socket) => {
 });
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => console.log(`Server on port ${PORT}`));
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));

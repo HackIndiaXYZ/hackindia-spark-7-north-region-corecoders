@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 /* eslint-disable react-hooks/refs */
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useEffect, useState, useRef } from "react";
@@ -40,16 +41,11 @@ export default function Chat() {
     // Initialise state from state or sessionStorage
     const initIsAdmin  = isCreating || sessionStorage.getItem("chat_isAdmin") === "true";
     const initRoomName = state?.roomName || sessionStorage.getItem("chat_roomName") || roomIdRef.current || "";
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsAdmin(initIsAdmin);
     setRoomName(initRoomName);
 
     // If neither roomId nor roomCode exists, nothing to do
-    if (!roomIdRef.current && !roomCode) {
-      setJoinError("Invalid room access");
-      setIsLoading(false);
-      return
-    };
+    if (!roomIdRef.current && !roomCode) return;
 
     const socket = io(import.meta.env.VITE_SOCKET_URL || "http://localhost:3001");
     socketRef.current = socket;
@@ -105,21 +101,27 @@ export default function Chat() {
     };
 
     socket.on("connect", doConnect);
-    // if (socket.connected) doConnect();
+    if (socket.connected) doConnect();
 
     socket.on("message_history", (history) => {
       setIsLoading(false);
       setMessages(history.map(msg => ({
         ...msg,
         type: msg.sender === usernameRef.current ? "user" : "other",
+        // AI history always shows on left (isAIMe not preserved in history)
       })));
     });
 
     socket.on("receive_message", (data) => {
-      setMessages(prev => [...prev, {
-        ...data,
-        type: data.sender === usernameRef.current ? "user" : "other",
-      }]);
+      let type;
+      if (data.isAIMe) {
+        type = "user"; // AI responding to ME — show on right
+      } else if (data.sender === usernameRef.current) {
+        type = "user";
+      } else {
+        type = "other";
+      }
+      setMessages(prev => [...prev, { ...data, type }]);
     });
 
     socket.on("room_count",   (count) => setMemberCount(count));
@@ -151,7 +153,7 @@ export default function Chat() {
     });
 
     const fallback = setTimeout(() => setIsLoading(false), 2000);
-    return () => { clearTimeout(fallback); socket.removeAllListeners();socket.disconnect(); };
+    return () => { clearTimeout(fallback); socket.disconnect(); };
   }, []);
 
   // Poll members (admin only)
@@ -170,10 +172,20 @@ export default function Chat() {
   }, [messages]);
 
   const sendMessage = () => {
-    if (!message.trim() || !socketRef.current || !roomIdRef.current) return;
+    if (!message.trim() || !socketRef.current) return;
     socketRef.current.emit("send_message", {
       roomId: roomIdRef.current,
       text: message,
+      sender: usernameRef.current,
+    });
+    setMessage("");
+  };
+
+  const sendAiMessage = (text) => {
+    if (!text.trim() || !socketRef.current) return;
+    socketRef.current.emit("ai_message", {
+      roomId: roomIdRef.current,
+      message: text,
       sender: usernameRef.current,
     });
     setMessage("");
@@ -298,7 +310,7 @@ export default function Chat() {
 
       {/* INPUT */}
       <div style={{ flexShrink: 0, position: "relative", zIndex: 1 }}>
-        <ChatInput value={message} setValue={setMessage} sendMessage={sendMessage} />
+        <ChatInput value={message} setValue={setMessage} sendMessage={sendMessage} sendAiMessage={sendAiMessage} />
       </div>
     </div>
   );
