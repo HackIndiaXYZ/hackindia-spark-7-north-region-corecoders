@@ -1,34 +1,14 @@
-// import Button from "../components/Button";
-// import GlassCard from "../components/GlassCard";
-// import { useNavigate } from "react-router-dom";
-
-// export default function Home() {
-//   const navigate = useNavigate();
-
-//   return (
-//     <div className="min-h-screen flex items-center justify-center px-4 bg-[radial-gradient(circle_at_top,rgba(99,102,241,0.2),#020617)]">
-//       <GlassCard className="w-full max-w-md text-center space-y-6">
-
-//         <h1 className="text-2xl font-bold">Welcome 👋</h1>
-
-//         <Button onClick={() => navigate("/public")}>
-//           Public Rooms
-//         </Button>
-
-//         <Button onClick={() => navigate("/private")}>
-//           Private Room
-//         </Button>
-
-//       </GlassCard>
-      
-//     </div>
-//   );
-// }
-
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../App";
 
 export default function Home() {
   const navigate = useNavigate();
+  const { currentUser, logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
 
   return (
     <div className="page-wrapper">
@@ -86,10 +66,22 @@ export default function Home() {
               }}>Connect Deeply.</span>
             </h1>
 
+            {currentUser && (
+              <p className="fade-up-d1" style={{
+                color: "#a78bfa",
+                fontSize: "14px",
+                marginTop: "14px",
+                fontWeight: 500,
+                fontFamily: "'Rajdhani', sans-serif",
+              }}>
+                Hey, {currentUser.username} 👋
+              </p>
+            )}
+
             <p className="fade-up-d1" style={{
               color: "#7b7b9d",
               fontSize: "14px",
-              marginTop: "14px",
+              marginTop: "8px",
               lineHeight: 1.6,
               fontWeight: 300,
             }}>
@@ -106,7 +98,7 @@ export default function Home() {
                 onClick={() => navigate("/private")}
                 style={{ width: "100%", textAlign: "center" }}
               >
-                 Create/Join a Private Room
+                🔒 &nbsp; Create / Join a Private Room
               </button>
 
               <button
@@ -134,28 +126,50 @@ export default function Home() {
                   e.currentTarget.style.borderColor = "rgba(99,102,241,0.3)";
                 }}
               >
-               🌐 &nbsp; Explore Public Rooms
+                🌐 &nbsp; Explore Public Rooms
               </button>
             </div>
 
-            {/* Footer stat */}
+            {/* Footer row */}
             <div style={{
               marginTop: "24px",
               paddingTop: "20px",
               borderTop: "1px solid rgba(255,255,255,0.06)",
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
+              justifyContent: "space-between",
             }}>
-              <div style={{
-                width: 6, height: 6, borderRadius: "50%",
-                background: "#22c55e",
-                boxShadow: "0 0 8px #22c55e",
-              }} />
-              <span style={{ color: "#7b7b9d", fontSize: "13px" }}>
-                10K+ users online
-              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <div style={{
+                  width: 6, height: 6, borderRadius: "50%",
+                  background: "#22c55e",
+                  boxShadow: "0 0 8px #22c55e",
+                }} />
+                <span style={{ color: "#7b7b9d", fontSize: "13px" }}>
+                  10K+ users online
+                </span>
+              </div>
+
+              <button
+                onClick={handleLogout}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#7b7b9d",
+                  fontSize: "12px",
+                  cursor: "pointer",
+                  fontFamily: "'Rajdhani', sans-serif",
+                  fontWeight: 600,
+                  letterSpacing: "0.5px",
+                  textTransform: "uppercase",
+                  padding: "4px 0",
+                  transition: "color 0.2s",
+                }}
+                onMouseEnter={e => e.currentTarget.style.color = "#f87171"}
+                onMouseLeave={e => e.currentTarget.style.color = "#7b7b9d"}
+              >
+                Sign out
+              </button>
             </div>
           </div>
 

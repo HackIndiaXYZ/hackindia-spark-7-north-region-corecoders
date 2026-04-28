@@ -1,3 +1,4 @@
+/* eslint-disable no-constant-binary-expression */
 /* eslint-disable react-hooks/set-state-in-effect */
 /* eslint-disable react-hooks/refs */
 /* eslint-disable react-hooks/exhaustive-deps */
@@ -34,12 +35,12 @@ export default function Chat() {
       const state = location.state;
 
       // ── Read values: prefer navigation state, fallback to sessionStorage ──
-      const roomCode = state?.roomCode || null; // only on first navigation
+      const roomCode = state?.roomCode || null;
       const isCreating = state?.isCreating ?? false;
 
       usernameRef.current =
          state?.username || sessionStorage.getItem("chat_username");
-      roomIdRef.current = sessionStorage.getItem("chat_roomId"); // null on first load
+      roomIdRef.current = sessionStorage.getItem("chat_roomId");
 
       // Init display state from sessionStorage
       setIsAdmin(
@@ -51,10 +52,12 @@ export default function Chat() {
          state?.roomName || sessionStorage.getItem("chat_roomName") || "",
       );
 
-      // Need at least a roomCode (first load) or stored roomId (refresh)
-      if (!roomCode && !roomIdRef.current) return;
+      // ── Updated guard: also allow through if we have a public roomId ──
+      if (!roomCode && !roomIdRef.current && !state?.roomId) return;
 
-      const socket = io("http://localhost:3001");
+      const socket = io(
+         "http://10.212.179.250:3001" || "https://localhost:5137",
+      );
       socketRef.current = socket;
 
       const doConnect = () => {
@@ -66,6 +69,7 @@ export default function Chat() {
                   roomName: state.roomName,
                   roomCode: roomCode,
                   username: usernameRef.current,
+                  isPublic: state?.isPublic ?? false,
                },
                (res) => {
                   if (res.error) {
@@ -78,15 +82,39 @@ export default function Chat() {
                   sessionStorage.setItem("chat_roomName", res.roomName);
                   sessionStorage.setItem("chat_username", usernameRef.current);
                   sessionStorage.setItem("chat_isAdmin", "true");
-                  sessionStorage.setItem("chat_roomCode", roomCode); // save original code for rejoin
+                  sessionStorage.setItem("chat_roomCode", roomCode);
                   setRoomName(res.roomName);
                   setIsAdmin(true);
                   isAdminRef.current = true;
                   setIsLoading(false);
                },
             );
+         } else if (state?.isPublic && state?.roomId) {
+            // ── FIRST LOAD: PUBLIC ROOM JOINER ──
+            socket.emit(
+               "join_public_room",
+               {
+                  roomId: state.roomId,
+                  username: usernameRef.current,
+               },
+               (res) => {
+                  if (res.error) {
+                     setJoinError(res.error);
+                     setIsLoading(false);
+                     return;
+                  }
+                  roomIdRef.current = res.roomId;
+                  sessionStorage.setItem("chat_roomId", res.roomId);
+                  sessionStorage.setItem("chat_roomName", res.roomName);
+                  sessionStorage.setItem("chat_username", usernameRef.current);
+                  sessionStorage.setItem("chat_isAdmin", "false");
+                  sessionStorage.setItem("chat_isPublic", "true");
+                  setRoomName(res.roomName);
+                  setIsLoading(false);
+               },
+            );
          } else if (roomCode && !isCreating) {
-            // ── FIRST LOAD: JOINER ──
+            // ── FIRST LOAD: PRIVATE ROOM JOINER ──
             socket.emit(
                "join_room",
                {
@@ -111,12 +139,10 @@ export default function Chat() {
             );
          } else if (roomIdRef.current) {
             // ── REFRESH (both creator and joiner) ──
-            // Creator refresh: isAdmin=true from sessionStorage, rejoin by roomId
             socket.emit("rejoin_room", {
                roomId: roomIdRef.current,
                username: usernameRef.current,
             });
-            // Restore admin state from sessionStorage (already set above)
          }
       };
 
@@ -125,24 +151,16 @@ export default function Chat() {
 
       socket.on("message_history", (history) => {
          setIsLoading(false);
-
          setMessages(
             history.map((msg) => {
                let type;
-
-               // 🔥 AI message logic (CRITICAL FIX)
                if (msg.isAI && msg.replyTo === usernameRef.current) {
-                  type = "user"; // AI replied to ME → right side
+                  type = "user";
+               } else if (msg.sender === usernameRef.current) {
+                  type = "user";
+               } else {
+                  type = "other";
                }
-               // normal user message
-               else if (msg.sender === usernameRef.current) {
-                  type = "user"; // my message → right side
-               }
-               // everyone else
-               else {
-                  type = "other"; // left side
-               }
-
                return { ...msg, type };
             }),
          );
@@ -151,11 +169,11 @@ export default function Chat() {
       socket.on("receive_message", (data) => {
          let type;
          if (data.isAIMe) {
-            type = "user"; // AI replied to ME → right side
+            type = "user";
          } else if (data.sender === usernameRef.current) {
-            type = "user"; // my own message → right side
+            type = "user";
          } else {
-            type = "other"; // someone else → left side
+            type = "other";
          }
          setMessages((prev) => [...prev, { ...data, type }]);
       });
@@ -241,15 +259,25 @@ export default function Chat() {
    }, [messages]);
 
    const sendMessage = () => {
-      if (!message.trim() || !socketRef.current || !roomIdRef.current) return;
-      socketRef.current.emit("send_message", {
-         roomId: roomIdRef.current,
-         text: message,
-         sender: usernameRef.current,
-      });
+      if (!message.trim() || !socketRef.current) return;
+
+      if (message.startsWith("@ai")) {
+         socketRef.current.emit("ai_message", {
+            roomId: roomIdRef.current,
+            message,
+            username: usernameRef.current,
+            context: messages.slice(-10), // 🔥 last 10 messages for context
+         });
+      } else {
+         socketRef.current.emit("send_message", {
+            roomId: roomIdRef.current,
+            text: message,
+            sender: usernameRef.current,
+         });
+      }
+
       setMessage("");
    };
-
    const sendAiMessage = (text) => {
       if (!text.trim() || !socketRef.current || !roomIdRef.current) return;
       socketRef.current.emit("ai_message", {
